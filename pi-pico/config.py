@@ -3,4 +3,4 @@ default_config = {
 }
 
 def parse_config(config: dict) -> dict:
-    ...
+    return config

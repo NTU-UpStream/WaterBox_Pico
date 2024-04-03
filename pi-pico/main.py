@@ -3,5 +3,4 @@ from waterbox import WaterBox
 
 waterbox = WaterBox()
 
-print(os.listdir("/"))
-print(os.listdir("/sd"))
+waterbox.setup(config="config.json")
