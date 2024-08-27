@@ -2,7 +2,6 @@
 
 ## Initialization
 
-
 ## CH4 General 
 This chapter have some system command.  
 Like serial number, manufacturer, SIM card info etc.  

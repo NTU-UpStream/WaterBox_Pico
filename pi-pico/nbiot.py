@@ -62,9 +62,9 @@ class LTEIOT6_Click():
         return True
 
     def restart(self, timeout=30000) -> bool:
-        self._power_off()
+        self.power_off()
         time.sleep_ms(1000)
-        self._power_on()
+        self.power_on()
         timeout_cnt = 0
         while not self.is_alive():
             timeout_cnt += 200
@@ -74,10 +74,10 @@ class LTEIOT6_Click():
 
         return True
 
-    def _power_on(self):
+    def power_on(self):
         self.power.on()
 
-    def _power_off(self):
+    def power_off(self):
         self.power.off()
 
     def attach(self, timeout=180000) -> bool:
@@ -224,7 +224,9 @@ class LTEIOT6_Click():
 
     def _send_command(self, command: str):
         # Check if there is \r\n\0 at the end of the command
-        command += "\r\n"
+        if command[-2:]!= "\r\n":
+            command += "\r\n"
+    
         self.uart.write(command)
         time.sleep_ms(100)
 
