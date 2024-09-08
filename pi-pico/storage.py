@@ -3,6 +3,8 @@ from machine import SPI, Pin
 import uos
 import logging
 import shutil
+import json
+
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +63,19 @@ class Storage():
     def save_config(self, config: dict, name: str):
         pass
 
-    def load_config(self, name: str):
+    def load_config(self):
+        if "sdcard" in uos.listdir('/'):
+            config = self._load_config_sdcard()
+
+    def _load_config_sdcard(self):
+        try:
+            with open('/sdcard/config.json', 'r') as f:
+                config = json.load(f)
+        except Exception as e:
+            self.logger.error(f"Error loading config from sdcard: {e}")
+
+
+    def _load_config_internal(self):
         pass
 
     def save_measurement(self, measurement: dict):

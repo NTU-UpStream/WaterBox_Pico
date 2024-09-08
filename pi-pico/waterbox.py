@@ -36,3 +36,5 @@ class WaterBox():
     def setup(self, **kwargs):
         self.power.on()
         self.storage.mount()
+
+        self.storage.load_config()
