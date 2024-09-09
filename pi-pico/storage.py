@@ -4,9 +4,11 @@ import uos
 import logging
 import shutil
 import json
+from config import default_config
 
 
-logger = logging.getLogger(__name__)
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 stream_handler = logging.StreamHandler()
 file_handler = logging.FileHandler("logging.log")
@@ -37,14 +39,14 @@ class Storage():
             sd = SDCard(self.spi, self.cs)
             vfs = uos.VfsFat(sd)
 
-            # If /sdcard exist. Check if it is a mount point.
-            if 'sdcard' in uos.listdir():
+            # If /external exist. Check if it is a mount point.
+            if 'external' in uos.listdir():
                 try:
-                    uos.umount("/sdcard")
+                    uos.umount("/external")
                 except Exception as e:
-                    self.logger.error(f"Error unmounting /sdcard. Please do not create the /sdcard directory manually.: {e}")
+                    self.logger.error(f"Error unmounting /external. Please do not create the /external directory manually.: {e}")
 
-            uos.mount(vfs, "/sdcard")
+            uos.mount(vfs, "/external")
             self.use_sd = True
             logger.info("SD Card mounted")
 
@@ -54,29 +56,53 @@ class Storage():
 
     def umount(self):
         try:
-            uos.umount("/sdcard")
+            uos.umount("/external")
             self.use_sd = False
             logger.info("SD Card unmounted")
         except Exception as e:
             self.logger.error(f"Unexpected error unmounting SDCard: {e}")
 
     def save_config(self, config: dict, name: str):
-        pass
+        try:
+            with open(name, 'w') as f:
+                json.dump(config, f)
+        except Exception as e:
+            self.logger.warning(f"Error saving config to {name}: {e}")
 
-    def load_config(self):
-        if "sdcard" in uos.listdir('/'):
+    def load_config(self) -> dict:
+        config_buffer = default_config.copy()
+        config = None
+        if "external" in uos.listdir('/'):
             config = self._load_config_sdcard()
+
+        if config is None:
+            config = self._load_config_internal()
+        
+        # Merge config with default config
+        if config is not None:
+            config_buffer.update(config)
+
+        self.save_config(config_buffer, "/config.json")
+
+        return config_buffer
 
     def _load_config_sdcard(self):
         try:
-            with open('/sdcard/config.json', 'r') as f:
+            with open('/external/config.json', 'r') as f:
                 config = json.load(f)
+            return config
         except Exception as e:
-            self.logger.error(f"Error loading config from sdcard: {e}")
-
+            self.logger.warning(f"Error loading config from sdcard: {e}")
+            return None
 
     def _load_config_internal(self):
-        pass
+        try:
+            with open('/config.json', 'r') as f:
+                config = json.load(f)
+            return config
+        except Exception as e:
+            self.logger.warning(f"Error loading config from internal storage: {e}")
+            return None
 
     def save_measurement(self, measurement: dict):
         pass
