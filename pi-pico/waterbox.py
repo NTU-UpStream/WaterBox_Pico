@@ -56,11 +56,11 @@ class WaterBox():
                 sta_if.active(False)
             
             # Configure the access point
-            self.ap.active(True)
             ssid = self.config.get('wifi_ssid', 'WaterBox')
             password = self.config.get('wifi_password', 'waterbox')
-            
             self.ap.config(essid=ssid, password=password)
+            self.ap.active(True)
+
             
             # Wait for the access point to be active
             while not self.ap.active():
