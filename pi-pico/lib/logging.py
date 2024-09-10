@@ -67,7 +67,6 @@ class StreamHandler(Handler):
             self.stream.flush()
 
     def emit(self, record):
-        print(f'{self.level} {record.levelno}')
         if record.levelno >= self.level:
             self.stream.write(self.format(record) + self.terminator)
 

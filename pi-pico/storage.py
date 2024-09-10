@@ -9,6 +9,7 @@ from config import default_config
 
 
 logger: logging.Logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 stream_handler = logging.StreamHandler()
 file_handler = logging.FileHandler("logging.log")
