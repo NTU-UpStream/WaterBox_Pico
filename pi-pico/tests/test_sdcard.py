@@ -3,6 +3,7 @@
 import machine
 import uos
 import sdcard
+import utime
 
 mosi = machine.Pin(19)
 miso = machine.Pin(16, machine.Pin.PULL_UP)
@@ -11,6 +12,8 @@ cs = machine.Pin(17)
 
 power = machine.Pin(6, machine.Pin.OUT)
 power.on() 
+
+utime.sleep(1)
 
 def sdtest():
     spi = machine.SPI(0, mosi=mosi, miso=miso, sck=sck)

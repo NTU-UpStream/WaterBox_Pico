@@ -1,12 +1,10 @@
-import ujson as json
-import uos
-import config
 import logging
 from machine import SPI, Pin
 from webpage import app
 import network
 import time
-import usys
+import asyncio
+import aiorepl
 
 from storage import Storage
 from hardware_config import SD_CS, SD_MOSI, SD_MISO, SD_SCK, POWER_PIN
@@ -31,7 +29,7 @@ logger.addHandler(file_handler)
 
 class WaterBox():
 
-    __slots__ = ('logger', 'storage', 'power', 'config', 'webpage', 'ap')
+    __slots__ = ('logger', 'storage', 'power', 'config', 'webpage', 'ap', 'access_ctrl', 'breathe_led')
 
     def __init__(self):
         self.logger = logger
@@ -40,13 +38,49 @@ class WaterBox():
         self.storage = Storage(SPI(0, sck=Pin(SD_SCK), mosi=Pin(SD_MOSI), miso=Pin(SD_MISO)), Pin(SD_CS))
         self.webpage = app
         self.ap = network.WLAN(network.AP_IF)
+        self.access_ctrl = Pin(7, Pin.IN, Pin.PULL_UP)
+        self.breathe_led = Pin(20, Pin.OUT)
 
     def setup(self, **kwargs):
         self.power.on()
         self.storage.mount()
         self.config = self.storage.load_config()
 
-    def access_mode(self):
+    async def breathing(self):
+        while True:
+            self.breathe_led.on()
+            await asyncio.sleep(0.5)
+            self.breathe_led.off()
+            await asyncio.sleep(0.5)
+
+    async def start_operation(self):
+        access_mode_task = None
+        breathe_task = asyncio.create_task(self.breathing())
+        repl = asyncio.create_task(aiorepl.task())
+        try:
+            while True:
+                if self.access_ctrl.value() == 1:  # Button pressed (active low)
+                    if access_mode_task is None:
+                        access_mode_task = asyncio.create_task(self.access_mode())
+                        self.logger.info("Access mode started")
+                else:
+                    if access_mode_task is not None:
+                        access_mode_task.cancel()
+                        await access_mode_task
+                        access_mode_task = None
+                        self.logger.info("Access mode stopped")
+                
+                # Your main WaterBox process logic here
+                await asyncio.sleep(1)  # Adjust as needed
+        
+        except asyncio.CancelledError:
+            self.logger.info("Operation cancelled")
+        finally:
+            if access_mode_task is not None:
+                access_mode_task.cancel()
+                await access_mode_task
+
+    async def access_mode(self):
         try:
             self.logger.info("Entering access mode...")
             
@@ -61,23 +95,26 @@ class WaterBox():
             self.ap.config(essid=ssid, password=password)
             self.ap.active(True)
 
-            
             # Wait for the access point to be active
             while not self.ap.active():
-                time.sleep(0.1)
+                await asyncio.sleep(0.1)
             
-            self.logger.info(f"Access Point active. SSID: {ssid}, IP: {self.ap.ifconfig()}")
+            self.logger.info(f"Access Point active. SSID: {ssid}, IP: {self.ap.ifconfig()[0]}")
             
             # Start the configuration web server
-            self.webpage.run(debug=True)
+            await self.webpage.start_server(debug=True)
         
-        except Exception as e:
-            self.logger.error(f"Error in access mode: {str(e)}")
+        except asyncio.CancelledError:
+            self.logger.info("Access mode cancelled")
+
+            # Clean up and exit access mode
+            self.webpage.shutdown()
+
         finally:
             # Clean up and exit access mode
             self.ap.active(False)
             self.logger.info("Exiting access mode")
 
     def run(self):
-        pass
+        asyncio.run(self.start_operation())
 

@@ -2,6 +2,11 @@ from machine import I2C, Pin
 from ads1x15 import ADS1115
 import utime
 
+# Power up ADS1115
+power = Pin(6, Pin.OUT)
+power.on()
+utime.sleep(1)
+
 # Initialize I2C0
 i2c = I2C(0, scl=Pin(5), sda=Pin(4), freq=40000)
 
