@@ -5,7 +5,7 @@ except ImportError:
 
 import logging
 from machine import SPI, Pin
-from webpage import app
+from webpage import WaterBoxWebPage
 import network
 import time
 import asyncio
@@ -41,7 +41,7 @@ class WaterBox():
         self.power = Pin(POWER_PIN, Pin.OUT)
         self.power.off()
         self.storage = Storage(SPI(0, sck=Pin(SD_SCK), mosi=Pin(SD_MOSI), miso=Pin(SD_MISO)), Pin(SD_CS))
-        self.webpage = app
+        self.webpage = WaterBoxWebPage(self)
         self.ap = network.WLAN(network.AP_IF)
         self.access_ctrl = Pin(7, Pin.IN, Pin.PULL_UP)
         self.breathe_led = Pin(20, Pin.OUT)
