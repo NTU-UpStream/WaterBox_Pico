@@ -1,0 +1,11 @@
+{
+    "id": "WaterBox",
+    "sample_period": 300,
+    "wifi": {
+        "ssid": "WaterBox",
+        "password": "waterbox",
+        "boot_as": "AP",
+        "max_try": 5
+    }
+
+}

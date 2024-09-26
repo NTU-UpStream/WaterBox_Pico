@@ -4,8 +4,12 @@ except ImportError:
     pass
 
 import logging
-from machine import SPI, Pin
+from machine import SPI, Pin, I2C
 from webpage import WaterBoxWebPage
+from wifiman import WiFiManager
+from microdot import Microdot
+from analog import WaterBoxAnalog
+from mqttcli import WaterBoxMQTTClient
 import network
 import time
 import asyncio
@@ -13,6 +17,7 @@ import aiorepl
 
 from storage import Storage
 from hardware_config import SD_CS, SD_MOSI, SD_MISO, SD_SCK, POWER_PIN
+from rp2 import bootsel_button
 
 
 logger: logging.Logger = logging.getLogger(__name__)
@@ -34,23 +39,54 @@ logger.addHandler(file_handler)
 
 class WaterBox():
 
-    __slots__ = ('logger', 'storage', 'power', 'config', 'webpage', 'ap', 'access_ctrl', 'breathe_led', 'access_mode_task')
+    __slots__ = ('logger', 'storage', 'power', 'config', 'webpage', 'adc_ctrl', 'wifiman', 'breathe_led', 'analog', 'mqtt')
 
     def __init__(self):
         self.logger = logger
         self.power = Pin(POWER_PIN, Pin.OUT)
         self.power.off()
+        self.breathe_led = Pin(20, Pin.OUT)
+        self.adc_ctrl = Pin(8, Pin.OUT)
+
         self.storage = Storage(SPI(0, sck=Pin(SD_SCK), mosi=Pin(SD_MOSI), miso=Pin(SD_MISO)), Pin(SD_CS))
         self.webpage = WaterBoxWebPage(self)
-        self.ap = network.WLAN(network.AP_IF)
-        self.access_ctrl = Pin(7, Pin.IN, Pin.PULL_UP)
-        self.breathe_led = Pin(20, Pin.OUT)
-        self.access_mode_task: Optional[asyncio.Task] = None
+        self.wifiman = WiFiManager(Pin(15, Pin.OUT))
+        self.analog = WaterBoxAnalog(I2C(0, scl=Pin(5), sda=Pin(4)))
+        self.mqtt = WaterBoxMQTTClient()
 
     def setup(self, **kwargs):
+        self.adc_ctrl.on()
         self.power.on()
         self.storage.mount()
         self.config = self.storage.load_config()
+        self.mqttsetup()
+        # self.mqtt.setup(client_id=self.wifiman.mac(), server=
+
+    def run(self):
+        asyncio.run(self.start_operation())
+
+    def reload_config(self):
+        self.config = self.storage.load_config()
+
+    def mqttsetup(self):
+        client_id = "WaterBox-"+self.wifiman.mac()
+        server = self.config.get('mqtt', {}).get('host', 'broker.emqx.io')
+        port = self.config.get('mqtt', {}).get('port', 1883)
+        self.mqtt.setup(client_id=client_id, server=server, port=port)
+
+    async def start_operation(self):
+        breathe_task = asyncio.create_task(self.breathing())
+        repl = asyncio.create_task(aiorepl.task())
+        webpage = asyncio.create_task(self.webpage.start_server(debug=True))
+        wifi = asyncio.create_task(self.wifi_manager())
+
+        try:
+            while True:
+                # Your main WaterBox process logic here
+                await asyncio.sleep(1)  # Adjust as needed
+        
+        except asyncio.CancelledError:
+            self.logger.info("Operation cancelled")
 
     async def breathing(self):
         while True:
@@ -58,71 +94,41 @@ class WaterBox():
             await asyncio.sleep(0.01)
             self.breathe_led.off()
             await asyncio.sleep(1)
+    
+    async def wifi_manager(self):
+        mode = self.config.get('wifi', {}).get('boot_as', 'sta').lower()
+        ap_ssid = self.config.get('wifi', {}).get('ap', {}).get('ssid', 'WaterBox')
+        ap_passwd = self.config.get('wifi', {}).get('ap', {}).get('password', 'waterbox')
+        sta_ssid = self.config.get('wifi', {}).get('sta', {}).get('ssid', '')
+        sta_passwd = self.config.get('wifi', {}).get('sta', {}).get('password', '')
 
-    async def start_operation(self):
-        self.access_mode_task = None
-        breathe_task = asyncio.create_task(self.breathing())
-        repl = asyncio.create_task(aiorepl.task())
-        try:
-            while True:
-                self.check_access_mode()
+        self.logger.info(f"Starting WiFi Manager in {mode} mode")
+        if mode == 'ap':
+            await self.wifiman.switch_mode(ap_ssid, ap_passwd, mode='ap')
+        elif mode == 'sta':
+            await self.wifiman.switch_mode(sta_ssid, sta_passwd, mode='sta')
+
+        while True:
+            if bootsel_button():
+                ap_ssid = self.config.get('wifi', {}).get('ap', {}).get('ssid', 'WaterBox')
+                ap_passwd = self.config.get('wifi', {}).get('ap', {}).get('password', 'waterbox')
+                sta_ssid = self.config.get('wifi', {}).get('sta', {}).get('ssid', '')
+                sta_passwd = self.config.get('wifi', {}).get('sta', {}).get('password', '')
+                if mode == 'ap':
+                    mode = 'sta'
+                    result = await self.wifiman.switch_mode(sta_ssid, sta_passwd, mode='sta')
+                    if result is False:
+                        self.logger.error("Failed to connect to WiFi. Falling back to AP mode.")
+                        await self.wifiman.switch_mode(ap_ssid, ap_passwd, mode='ap')
+                        mode = 'ap'
+
+                elif mode == 'sta':
+                    await self.wifiman.switch_mode(ap_ssid, ap_passwd, mode='ap')
+                    mode = 'ap'
                 
-                # Your main WaterBox process logic here
-                await asyncio.sleep(1)  # Adjust as needed
-        
-        except asyncio.CancelledError:
-            self.logger.info("Operation cancelled")
-
-    def check_access_mode(self) -> None:
-        if self.access_ctrl.value() == 1:
-            if (self.access_mode_task is not None) and (not self.access_mode_task.done()):
-                return
-            
-            self.access_mode_task = asyncio.create_task(self.access_on())
-            self.logger.info("Access mode started")
-        else:
-            if (self.access_mode_task is None) or self.access_mode_task.done():
-                return
-            
-            self.access_mode_task.cancel()
-            self.logger.info("Access mode stopped")
-            self.access_mode_task = None
-
-    async def access_on(self):
-        try:
-            self.logger.info("Entering access mode...")
-            
-            # Disable the station interface if it's active
-            sta_if = network.WLAN(network.STA_IF)
-            if sta_if.active():
-                sta_if.active(False)
-            
-            # Configure the access point
-            ssid = self.config.get('wifi_ssid', 'WaterBox')
-            password = self.config.get('wifi_password', 'waterbox')
-            self.ap.config(essid=ssid, password=password)
-            self.ap.active(True)
-
-            # Wait for the access point to be active
-            while not self.ap.active():
-                await asyncio.sleep(0.1)
-            
-            self.logger.info(f"Access Point active. SSID: {ssid}, IP: {self.ap.ifconfig()[0]}")
-            
-            # Start the configuration web server
-            await self.webpage.start_server(debug=True)
-        
-        except asyncio.CancelledError:
-            self.logger.info("Access mode cancelled")
-
-            # Clean up and exit access mode
-            self.webpage.shutdown()
-
-        finally:
-            # Clean up and exit access mode
-            self.ap.active(False)
-            self.logger.info("Exiting access mode")
-
-    def run(self):
-        asyncio.run(self.start_operation())
+                # Wait for the button to be released
+                while bootsel_button():
+                    await asyncio.sleep(0.1)
+                
+            await asyncio.sleep(1)
 

@@ -63,12 +63,19 @@ class Storage():
         except Exception as e:
             self.logger.error(f"Unexpected error unmounting SDCard: {e}")
 
-    def save_config(self, config: dict, name: str):
+    def save_config(self, config: dict):
         try:
-            with open(name, 'w') as f:
+            sdconfig = '/external/config.json'
+            with open(sdconfig, 'w') as f:
                 json.dump(config, f)
         except Exception as e:
-            self.logger.warning(f"Error saving config to {name}: {e}")
+            self.logger.warning(f"Error saving config to {sdconfig}: {e}")
+
+        try:
+            with open('/config.json', 'w') as f:
+                json.dump(config, f)
+        except Exception as e:
+            self.logger.warning(f"Error saving config to /config.json: {e}")
 
     def load_config(self) -> dict:
         config_buffer = default_config.copy()
@@ -81,9 +88,9 @@ class Storage():
         
         # Merge config with default config
         if config is not None:
-            config_buffer.update(config)
+            config_buffer.update({k: config[k] for k in config if k in config_buffer})
 
-        self.save_config(config_buffer, "/config.json")
+        self.save_config(config_buffer)
 
         return config_buffer
 

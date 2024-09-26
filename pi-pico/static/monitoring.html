@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Water Box Monitoring</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background-color: #f0f0f0;
+        }
+        .container {
+            background-color: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        .value-container {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .value-box {
+            background-color: #e9e9e9;
+            padding: 15px;
+            border-radius: 5px;
+            text-align: center;
+        }
+        .value-label {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .value {
+            font-size: 2em;
+            transition: color 0.3s;
+        }
+        #wifi-status {
+            text-align: center;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        #mqtt-button {
+            display: block;
+            margin: 20px auto;
+            padding: 10px 20px;
+            font-size: 1em;
+            cursor: pointer;
+        }
+        #mqtt-status {
+            text-align: center;
+            margin-top: 10px;
+            font-weight: bold;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Water Box Monitoring</h1>
+        <div class="value-container">
+            <div class="value-box">
+                <div class="value-label">Analog 1</div>
+                <div id="analog1" class="value">-</div>
+            </div>
+            <div class="value-box">
+                <div class="value-label">Analog 2</div>
+                <div id="analog2" class="value">-</div>
+            </div>
+            <div class="value-box">
+                <div class="value-label">Analog 3</div>
+                <div id="analog3" class="value">-</div>
+            </div>
+            <div class="value-box">
+                <div class="value-label">Analog 4</div>
+                <div id="analog4" class="value">-</div>
+            </div>
+        </div>
+        <div id="wifi-status">WiFi Status: Checking...</div>
+        <button id="mqtt-button">Connect MQTT</button>
+        <div id="mqtt-status"></div>
+    </div>
+
+    <script>
+        function updateValues() {
+            fetch('/analog_values')
+                .then(response => response.json())
+                .then(data => {
+                    updateAnalogValue('analog1', data[0]);
+                    updateAnalogValue('analog2', data[1]);
+                    updateAnalogValue('analog3', data[2]);
+                    updateAnalogValue('analog4', data[3]);
+                })
+                .catch(error => console.error('Error fetching analog values:', error));
+        }
+
+        function updateAnalogValue(id, value) {
+            const element = document.getElementById(id);
+            element.textContent = value.toFixed(2);
+            if (value >= 3.3) {
+                element.style.color = 'red';
+            } else if (value <= 0.1) {
+                element.style.color = 'blue';
+            } else {
+                element.style.color = 'black';
+            }
+        }
+
+        function updateWiFiStatus() {
+            fetch('/wifi_status')
+                .then(response => response.text())
+                .then(status => {
+                    document.getElementById('wifi-status').textContent = 'WiFi Status: ' + status;
+                })
+                .catch(error => console.error('Error fetching WiFi status:', error));
+        }
+
+        document.getElementById('mqtt-button').addEventListener('click', function() {
+            const button = document.getElementById('mqtt-button');
+            const statusElement = document.getElementById('mqtt-status');
+            
+            button.disabled = true;
+            button.textContent = 'Connecting...';
+            statusElement.style.display = 'block';
+            statusElement.textContent = 'Attempting to connect...';
+
+            fetch('/mqtt_connect', { method: 'GET' })
+                .then(response => response.text())
+                .then(status => {
+                    if (status === 'connected') {
+                        statusElement.textContent = 'MQTT Connected Successfully';
+                        statusElement.style.color = 'green';
+                        button.textContent = 'MQTT Connected';
+                    } else {
+                        statusElement.textContent = 'MQTT Connection Failed';
+                        statusElement.style.color = 'red';
+                        button.textContent = 'Connect MQTT';
+                        button.disabled = false;
+                    }
+                })
+                .catch(error => {
+                    console.error('Error connecting MQTT:', error);
+                    statusElement.textContent = 'MQTT Connection Error';
+                    statusElement.style.color = 'red';
+                    button.textContent = 'Connect MQTT';
+                    button.disabled = false;
+                });
+        });
+
+        // Update values immediately and then every second
+        updateValues();
+        updateWiFiStatus();
+        setInterval(updateValues, 1000);
+        setInterval(updateWiFiStatus, 5000);
+    </script>
+</body>
+</html>

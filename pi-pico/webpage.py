@@ -1,5 +1,8 @@
-from microdot import Microdot, send_file
+from microdot import Microdot, send_file, Response, Request
 from storage import Storage
+from config import default_config
+import json
+import machine
 
 try:
     from waterbox import WaterBox
@@ -10,19 +13,40 @@ class WaterBoxWebPage(Microdot):
     def __init__(self, box: WaterBox):
         super().__init__()
         self.box = box
+        self.led = machine.Pin("LED", machine.Pin.OUT)
+        
+        self.route('/')(self.index)
+        self.route('/config')(self.config)
+        self.route('/config/current')(self.config_current)
+        self.route('/config/submit', methods=['POST'])(self.submit_config)
+        self.route('/static/<path:path>')
+        self.route('/shutdown')(self.shutdown)
+        self.route('/monitor')(self.monitoring)
+        self.route('/analog_values')(self.analog_values)
+        self.route('/wifi_status')(self.wifi_status)
+        self.route('/mqtt_connect')(self.mqtt_connect)
+        self.route('/toggle_led')(self.toggle_led)
 
-        self.route('/', self.index)
-
-    def add_routes(self, url_pattern, methods):
-        pass
-
-    def index(self, request):
+    async def index(self, request):
         return send_file('static/index.html')
 
-    def config(self, request):
+    async def config(self, request):
         return send_file('static/config.html')
+    
+    async def submit_config(self, request):
+        # Process the form data
+        form_data = request.form
+        config_buffer = default_config.copy()
+        config_buffer.update({k: form_data[k] for k in form_data if k in config_buffer})
 
-    def static(self, request, path):
+        # Save the config
+        self.box.storage.save_config(config_buffer)
+        self.box.reload_config()
+
+    async def config_current(self, request):
+        return Response(json.dumps(self.box.config))
+        
+    async def static(self, request, path):
         if '..' in path:
             # directory traversal is not allowed
             return 'Not found', 404
@@ -31,3 +55,30 @@ class WaterBoxWebPage(Microdot):
     def shutdown(self, request):
         request.app.shutdown()
         return 'The server is shutting down...'
+
+    async def monitoring(self, request):
+        return send_file('static/monitoring.html')
+    
+    async def analog_values(self, request):
+        values = self.box.analog.read_all()
+        
+        # Ensure we have a list of 4 numbers
+        if not isinstance(values, list) or len(values) != 4:
+            return Response(json.dumps({"error": "Invalid analog values"}), status_code=500)
+        
+        # Convert to a list of floats (which are always JSON-serializable)
+        serializable_values = [float(v) for v in values]
+        return Response(json.dumps(serializable_values))
+    
+    async def wifi_status(self, request):
+        status = self.box.wifiman.status()
+        return Response(status)
+
+    async def mqtt_connect(self, request):
+        result = self.box.mqtt.connect()
+        print(result)
+        return Response(json.dumps({"result": result}))
+
+    async def toggle_led(self, request):
+        self.led.toggle()
+        return Response(json.dumps({"led_state": self.led.value()}))
