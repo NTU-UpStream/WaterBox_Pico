@@ -52,6 +52,15 @@
         .btn:hover {
             background-color: #0056b3;
         }
+        #toggleLED {
+            transition: background-color 0.3s;
+        }
+        #toggleLED.on {
+            background-color: #28a745;
+        }
+        #toggleLED.off {
+            background-color: #dc3545;
+        }
         footer {
             margin-top: 20px;
             color: #666;
@@ -65,12 +74,12 @@
             <h1>WaterBox Embedded System</h1>
         </header>
         <main>
-            <p>Welcome to the WaterBox Embedded System interface. This system is hosted on a Pi Pico using MicroDot.</p>
+            <p>Welcome to the WaterBox Embedded System interface.</p>
             <nav>
                 <ul>
                     <li><a href="/config" class="btn">Configuration Page</a></li>
                     <li><a href="/monitor" class="btn">Monitoring Page</a></li>
-                    <li><button id="toggleLED" class="btn">Toggle LED</button></li>
+                    <li><button id="toggleLED" class="btn off">Toggle LED: OFF</button></li>
                 </ul>
             </nav>
         </main>
@@ -79,17 +88,33 @@
         <p>&copy; 2024 WaterBox Embedded System</p>
     </footer>
     <script>
-        document.getElementById('toggleLED').addEventListener('click', function() {
+        const toggleLEDButton = document.getElementById('toggleLED');
+        let ledState = false;
+
+        toggleLEDButton.addEventListener('click', function() {
             fetch('/toggle_led')
                 .then(response => response.json())
                 .then(data => {
-                    alert('LED state: ' + (data.led_state ? 'ON' : 'OFF'));
+                    ledState = data.led_state;
+                    updateLEDButton();
                 })
                 .catch(error => {
                     console.error('Error:', error);
                     alert('Failed to toggle LED');
                 });
         });
+
+        function updateLEDButton() {
+            if (ledState) {
+                toggleLEDButton.textContent = 'Toggle LED: ON';
+                toggleLEDButton.classList.remove('off');
+                toggleLEDButton.classList.add('on');
+            } else {
+                toggleLEDButton.textContent = 'Toggle LED: OFF';
+                toggleLEDButton.classList.remove('on');
+                toggleLEDButton.classList.add('off');
+            }
+        }
     </script>
 </body>
 </html>

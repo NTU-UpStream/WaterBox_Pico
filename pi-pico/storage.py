@@ -64,7 +64,9 @@ class Storage():
             self.logger.error(f"Unexpected error unmounting SDCard: {e}")
 
     def save_config(self, config: dict):
+        print(1)
         try:
+            print(2)
             sdconfig = '/external/config.json'
             with open(sdconfig, 'w') as f:
                 json.dump(config, f)
@@ -72,6 +74,7 @@ class Storage():
             self.logger.warning(f"Error saving config to {sdconfig}: {e}")
 
         try:
+            print(3)
             with open('/config.json', 'w') as f:
                 json.dump(config, f)
         except Exception as e:

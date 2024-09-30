@@ -46,16 +46,15 @@ class WiFiManager:
             self.wlan.connect(ssid, passwd)
             for _ in range(10):
                 self.status_led.on()
-                await asyncio.sleep(0.01)
-                self.status_led.off()
     
                 if self.wlan.isconnected():
                     self.logger.info(f"Connected to WiFi: {ssid}, IP: {self.wlan.ifconfig()[0]}")
                     self.sta_ip = self.wlan.ifconfig()[0]
+                    self.status_led.off()
                     return True
                 await asyncio.sleep(1)
             self.logger.warning("Failed to connect to WiFi. Retrying...")
-
+        self.status_led.off()
         self.logger.error("Failed to connect to WiFi.")
         self.wlan.active(False)        
         return False
@@ -67,9 +66,8 @@ class WiFiManager:
 
         while not self.ap.active():
             self.status_led.on()
-            await asyncio.sleep(0.01)
-            self.status_led.off()
             await asyncio.sleep(1)
+        self.status_led.off()
         
         self.logger.info(f"Access Point activated: {ssid}, IP: {self.ap.ifconfig()[0]}")
         return True

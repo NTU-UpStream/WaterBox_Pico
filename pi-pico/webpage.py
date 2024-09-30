@@ -1,6 +1,6 @@
 from microdot import Microdot, send_file, Response, Request
 from storage import Storage
-from config import default_config
+from config import WaterBoxConfig
 import json
 import machine
 
@@ -34,14 +34,25 @@ class WaterBoxWebPage(Microdot):
         return send_file('static/config.html')
     
     async def submit_config(self, request):
-        # Process the form data
-        form_data = request.form
-        config_buffer = default_config.copy()
-        config_buffer.update({k: form_data[k] for k in form_data if k in config_buffer})
+        try:
+            # Parse JSON data from the request body
+            new_config = request.json
+            print(new_config)
 
-        # Save the config
-        self.box.storage.save_config(config_buffer)
-        self.box.reload_config()
+            if not new_config:
+                return Response(json.dumps({"error": "No data received"}), status_code=400)
+
+            # Update the configuration
+            config_buffer = self.box.config.copy()
+            config_buffer.update(new_config)
+
+            # Save the config
+            self.box.storage.save_config(config_buffer)
+            self.box.reload_config()
+
+            return Response(json.dumps({"message": "Configuration updated successfully"}), status_code=200)
+        except Exception as e:
+            return Response(json.dumps({"error": str(e)}), status_code=500)
 
     async def config_current(self, request):
         return Response(json.dumps(self.box.config))

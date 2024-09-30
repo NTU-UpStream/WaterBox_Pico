@@ -10,6 +10,7 @@ from wifiman import WiFiManager
 from microdot import Microdot
 from analog import WaterBoxAnalog
 from mqttcli import WaterBoxMQTTClient
+from config import WaterBoxConfig
 import network
 import time
 import asyncio
@@ -53,12 +54,13 @@ class WaterBox():
         self.wifiman = WiFiManager(Pin(15, Pin.OUT))
         self.analog = WaterBoxAnalog(I2C(0, scl=Pin(5), sda=Pin(4)))
         self.mqtt = WaterBoxMQTTClient()
+        self.config = WaterBoxConfig()
 
     def setup(self, **kwargs):
         self.adc_ctrl.on()
         self.power.on()
         self.storage.mount()
-        self.config = self.storage.load_config()
+        self.config.update(self.storage.load_config())
         self.mqttsetup()
         # self.mqtt.setup(client_id=self.wifiman.mac(), server=
 
@@ -66,7 +68,7 @@ class WaterBox():
         asyncio.run(self.start_operation())
 
     def reload_config(self):
-        self.config = self.storage.load_config()
+        self.config.update(self.storage.load_config())
 
     def mqttsetup(self):
         client_id = "WaterBox-"+self.wifiman.mac()
